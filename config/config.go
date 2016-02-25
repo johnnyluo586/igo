@@ -2,6 +2,7 @@ package config
 
 import (
 	"io/ioutil"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -13,8 +14,13 @@ type Config struct {
 
 //ServerConfig the server config
 type ServerConfig struct {
-	Addr          string `yaml:"addr"`
-	MaxClientConn int    `yaml:"maxClientConn"`
+	Addr   string `yaml:"addr"`
+	User   string `yaml:"user"`
+	Passwd string `yaml:"passwd"`
+	Schema string `yaml:"schema"`
+
+	MaxClientConn int           `yaml:"maxClientConn"`
+	WriteTimeout  time.Duration `yaml:"writeTimeout"`
 }
 
 //ParseConfig parse Config from yaml file path.

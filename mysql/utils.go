@@ -83,6 +83,9 @@ func readBool(input string) (value bool, valid bool) {
 /******************************************************************************
 *                             Authentication                                  *
 ******************************************************************************/
+func ScramblePassword(scramble, password []byte) []byte {
+	return scramblePassword(scramble, password)
+}
 
 // Encrypt password using 4.1+ method
 func scramblePassword(scramble, password []byte) []byte {
@@ -572,6 +575,10 @@ func readLengthEncodedInteger(b []byte) (uint64, bool, int) {
 
 	// 0-250: value of first byte
 	return uint64(b[0]), false, 1
+}
+
+func AppendLengthEncodedInteger(b []byte, n uint64) []byte {
+	return appendLengthEncodedInteger(b, n)
 }
 
 // encodes a uint64 value and appends it to the given bytes slice

@@ -9,9 +9,10 @@
 package mysql
 
 const (
-	MinProtocolVersion byte = 10
-	MaxPacketSize           = 1<<24 - 1
-	TimeFormat              = "2006-01-02 15:04:05.999999"
+	MinProtocolVersion byte   = 10
+	MaxPacketSize             = 1<<24 - 1
+	TimeFormat                = "2006-01-02 15:04:05.999999"
+	ServerVersion      string = "5.5-igo-mysql-0.1"
 )
 
 // MySQL constants documentation:
@@ -26,6 +27,9 @@ const (
 
 // https://dev.mysql.com/doc/internals/en/capability-flags.html#packet-Protocol::CapabilityFlags
 type ClientFlag uint32
+
+//DefaultCapability defautl Capability
+var DefaultCapability = ClientLongPassword | ClientLongFlag | ClientConnectWithDB | ClientProtocol41 | ClientTransactions | ClientSecureConn | ClientFoundRows
 
 const (
 	ClientLongPassword ClientFlag = 1 << iota

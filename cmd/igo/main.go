@@ -7,6 +7,8 @@ import (
 	"igo/log"
 	"igo/server"
 	"os"
+	"os/signal"
+	"syscall"
 )
 
 var (
@@ -35,5 +37,16 @@ func main() {
 
 	//new and run server
 	srv := server.NewServer(cfg)
-	srv.Run()
+
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go func() {
+		sig := <-sc
+		log.Infof("Got signal [%d] to exit.", sig)
+		srv.Close()
+		os.Exit(0)
+	}()
+
+	log.Error(srv.Run())
 }

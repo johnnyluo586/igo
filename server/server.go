@@ -3,11 +3,11 @@ package server
 import (
 	"fmt"
 	"net"
-	"os"
 )
 
 import (
 	"igo/config"
+	"igo/log"
 	"igo/utils"
 )
 
@@ -34,29 +34,32 @@ func NewServer(conf *config.Config) *Server {
 }
 
 //Run  run the server
-func (s *Server) Run() {
+func (s *Server) Run() error {
 	if s.cfg.Server.Addr == "" {
-		fmt.Println("addr is not set")
-		os.Exit(-1)
+		return fmt.Errorf("addr is not set")
 	}
 	addr, err := net.ResolveTCPAddr("tcp", s.cfg.Server.Addr)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+		return err
 	}
 	ls, err := net.ListenTCP("tcp", addr)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(-1)
+		return err
 	}
+	log.Info("Server Running on addr: ", addr.String())
 	for {
 		conn, err := ls.AcceptTCP()
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			continue
 		}
 		go s.handleClient(conn)
 	}
+
+}
+
+func (s *Server) Close() {
+
 }
 
 func (s *Server) handleClient(conn *net.TCPConn) {
@@ -65,12 +68,13 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	//set conn
 	conn.SetReadBuffer(rcvBuffer)
 	conn.SetWriteBuffer(sndBuffer)
-	conn.SetNoDelay(false)
+	//conn.SetKeepAlive(true)
+	//conn.SetNoDelay(false)
 
 	//new Client
 	client, die := newClient(conn)
 	if err := client.Handshake(); err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		return
 	}
 
@@ -79,7 +83,7 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 
 		select {
 		case <-die:
-			fmt.Println("client die")
+			log.Error("client close: ", client.connectID)
 			return
 		}
 	}
