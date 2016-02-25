@@ -31,26 +31,36 @@ type Client struct {
 	dbname    string
 	connectID uint32
 
+	salt             []byte
 	status           uint16
 	capability       uint32
 	collation        byte
 	sequence         uint8
 	maxPacketAllowed int
 	writeTimeout     time.Duration
-	salt             []byte
 }
 
-func newClient(conn *net.TCPConn) (*Client, chan struct{}) {
+func newClient(conn *net.TCPConn, conf *config.ServerConfig) (*Client, chan struct{}) {
 	c := &Client{
+		netConn:          conn,
 		die:              make(chan struct{}),
 		buf:              newBuffer(conn),
 		connectID:        atomic.AddUint32(&baseConnectID, 1),
-		salt:             make([]byte, 20),
+		salt:             mysql.RandomBuf(20),
 		maxPacketAllowed: mysql.MaxPacketSize,
-		writeTimeout:     time.Duration(10),
+		writeTimeout:     time.Duration(defaultWriteTimeout * time.Second),
+		cfg:              conf,
 	}
 
 	return c, c.die
+}
+
+func (c *Client) Addr() string {
+	return c.netConn.RemoteAddr().String()
+}
+
+func (c *Client) ConnectID() uint32 {
+	return c.connectID
 }
 
 func (c *Client) close() { close(c.die) }
@@ -144,8 +154,9 @@ func (c *Client) readHandshakeRespone() error {
 
 	checkAuth := mysql.ScramblePassword(c.salt, []byte(c.cfg.Passwd))
 	if c.user != c.cfg.User || !bytes.Equal(auth, checkAuth) {
-		log.Error("ClientConn", "readHandshakeResponse", "error", 0, "auth", auth, "checkAuth", checkAuth, "client_user", c.user, "config_set_user", c.cfg.User, "passworld", c.cfg.Passwd)
-		return mysql.NewErrf(mysql.ErrAccessDenied, c.user, c.netConn.RemoteAddr().String(), "Yes")
+		log.Error("readHandshakeResponse error: 0, auth: ", auth,
+			",checkAuth: ", checkAuth, ",client_user: ", c.user, ",config_set_user: ", c.cfg.User, ",passworld: ", c.cfg.Passwd)
+		return mysql.NewErr(mysql.ErrAccessDenied, c.user, c.netConn.RemoteAddr().String(), "Yes")
 	}
 
 	pos += authLen
@@ -265,9 +276,7 @@ func (c *Client) readPacket() ([]byte, error) {
 
 // Write packet buffer 'data'
 func (c *Client) writePacket(data []byte) error {
-	log.Debug(data)
 	pktLen := len(data) - 4
-	log.Debug("pktLen", pktLen)
 	if pktLen > c.maxPacketAllowed {
 		return mysql.ErrPktTooLarge
 	}
@@ -336,6 +345,7 @@ func (c *Client) Accept() {
 }
 
 func (c *Client) dispatch(cmd byte, data []byte) error {
+	log.Debugf("dispatch: %v %v", cmd, string(data))
 	switch cmd {
 	case mysql.ComQuery:
 		c.handleQuery(data)
@@ -379,6 +389,8 @@ func (c *Client) handleStmt(data []byte) error {
 }
 
 func (c *Client) useDB(db string) error {
+	c.dbname = db
+	//TODO usedb in backend
 
 	return nil
 }

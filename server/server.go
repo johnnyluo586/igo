@@ -72,18 +72,24 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	//conn.SetNoDelay(false)
 
 	//new Client
-	client, die := newClient(conn)
+	client, die := newClient(conn, &s.cfg.Server)
+	defer func() {
+		log.Info("Client Close: ", client.ConnectID())
+	}()
+	log.Infof("New Connect from addr: %v, id: %v", client.Addr(), client.ConnectID())
 	if err := client.Handshake(); err != nil {
 		log.Error(err)
 		return
 	}
+	log.Info("Auth OK: ", client.ConnectID())
 
 	for {
 		client.Accept()
 
+		//handle the connection close
 		select {
 		case <-die:
-			log.Error("client close: ", client.connectID)
+
 			return
 		}
 	}
