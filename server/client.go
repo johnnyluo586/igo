@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+//Client the client connection object
 type Client struct {
 	con *net.TCPConn
 	die chan struct{}
@@ -35,6 +36,7 @@ func (c *Client) Handshake() error {
 		return err
 	}
 	c.writeOK()
+	c.seq = 0
 
 	return nil
 }
@@ -72,10 +74,23 @@ func (c *Client) dispatch(cmd byte, data []byte) error {
 	switch cmd {
 	case mysql.ComQuery:
 		c.handleQuery(data)
+
 	case mysql.ComInitDB:
 		c.handleUseDB(data)
-	defauflt:
-        return fmt.Errorf("unsurport cmd %v  %v", cmd, (string)data)
+
+	case mysql.ComFieldList:
+		c.handleFieldList(data)
+
+	case mysql.ComStmtClose,
+		mysql.ComStmtExecute,
+		mysql.ComStmtFetch,
+		mysql.ComStmtPrepare,
+		mysql.ComStmtReset,
+		mysql.ComStmtSendLongData:
+		c.handleStmt(data)
+
+	default:
+		return fmt.Errorf("unsurport cmd %v  %v", cmd, string(data))
 	}
 	return nil
 }
@@ -91,3 +106,11 @@ func (c *Client) handleQuery(data []byte) error { return nil }
 
 //handleUseDB
 func (c *Client) handleUseDB(data []byte) error { return nil }
+
+//handleFieldList
+func (c *Client) handleFieldList(data []byte) error { return nil }
+
+//handleStmt
+func (c *Client) handleStmt(data []byte) error {
+	return nil
+}

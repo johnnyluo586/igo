@@ -25,8 +25,8 @@ type mysqlConn struct {
 	maxPacketAllowed int
 	maxWriteSize     int
 	writeTimeout     time.Duration
-	flags            clientFlag
-	status           statusFlag
+	flags            ClientFlag
+	status           StatusFlag
 	sequence         uint8
 	parseTime        bool
 	strict           bool
@@ -78,7 +78,7 @@ func (mc *mysqlConn) Begin() (driver.Tx, error) {
 func (mc *mysqlConn) Close() (err error) {
 	// Makes Close idempotent
 	if mc.netConn != nil {
-		err = mc.writeCommandPacket(comQuit)
+		err = mc.writeCommandPacket(ComQuit)
 	}
 
 	mc.cleanup()
@@ -108,7 +108,7 @@ func (mc *mysqlConn) Prepare(query string) (driver.Stmt, error) {
 		return nil, driver.ErrBadConn
 	}
 	// Send command
-	err := mc.writeCommandPacketStr(comStmtPrepare, query)
+	err := mc.writeCommandPacketStr(ComStmtPrepare, query)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (strin
 				buf = append(buf, "NULL"...)
 			} else {
 				buf = append(buf, "_binary'"...)
-				if mc.status&statusNoBackslashEscapes == 0 {
+				if mc.status&StatusNoBackslashEscapes == 0 {
 					buf = escapeBytesBackslash(buf, v)
 				} else {
 					buf = escapeBytesQuotes(buf, v)
@@ -231,7 +231,7 @@ func (mc *mysqlConn) interpolateParams(query string, args []driver.Value) (strin
 			}
 		case string:
 			buf = append(buf, '\'')
-			if mc.status&statusNoBackslashEscapes == 0 {
+			if mc.status&StatusNoBackslashEscapes == 0 {
 				buf = escapeStringBackslash(buf, v)
 			} else {
 				buf = escapeStringQuotes(buf, v)
@@ -284,7 +284,7 @@ func (mc *mysqlConn) Exec(query string, args []driver.Value) (driver.Result, err
 // Internal function to execute commands
 func (mc *mysqlConn) exec(query string) error {
 	// Send command
-	err := mc.writeCommandPacketStr(comQuery, query)
+	err := mc.writeCommandPacketStr(ComQuery, query)
 	if err != nil {
 		return err
 	}
@@ -320,7 +320,7 @@ func (mc *mysqlConn) Query(query string, args []driver.Value) (driver.Rows, erro
 		args = nil
 	}
 	// Send command
-	err := mc.writeCommandPacketStr(comQuery, query)
+	err := mc.writeCommandPacketStr(ComQuery, query)
 	if err == nil {
 		// Read Result
 		var resLen int
@@ -345,7 +345,7 @@ func (mc *mysqlConn) Query(query string, args []driver.Value) (driver.Rows, erro
 // The returned byte slice is only valid until the next read
 func (mc *mysqlConn) getSystemVar(name string) ([]byte, error) {
 	// Send command
-	if err := mc.writeCommandPacketStr(comQuery, "SELECT @@"+name); err != nil {
+	if err := mc.writeCommandPacketStr(ComQuery, "SELECT @@"+name); err != nil {
 		return nil, err
 	}
 
@@ -354,7 +354,7 @@ func (mc *mysqlConn) getSystemVar(name string) ([]byte, error) {
 	if err == nil {
 		rows := new(textRows)
 		rows.mc = mc
-		rows.columns = []mysqlField{{fieldType: fieldTypeVarChar}}
+		rows.columns = []mysqlField{{fieldType: FieldTypeVarChar}}
 
 		if resLen > 0 {
 			// Columns

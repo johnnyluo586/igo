@@ -50,8 +50,8 @@ func (d MySQLDriver) Open(dsn string) (driver.Conn, error) {
 
 	// New mysqlConn
 	mc := &mysqlConn{
-		maxPacketAllowed: maxPacketSize,
-		maxWriteSize:     maxPacketSize - 1,
+		maxPacketAllowed: MaxPacketSize,
+		maxWriteSize:     MaxPacketSize - 1,
 	}
 	mc.cfg, err = ParseDSN(dsn)
 	if err != nil {
@@ -116,7 +116,7 @@ func (d MySQLDriver) Open(dsn string) (driver.Conn, error) {
 		return nil, err
 	}
 	mc.maxPacketAllowed = stringToInt(maxap) - 1
-	if mc.maxPacketAllowed < maxPacketSize {
+	if mc.maxPacketAllowed < MaxPacketSize {
 		mc.maxWriteSize = mc.maxPacketAllowed
 	}
 

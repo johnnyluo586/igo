@@ -2,10 +2,13 @@ package server
 
 import (
 	"fmt"
-	"igo/config"
-	"igo/utils"
 	"net"
 	"os"
+)
+
+import (
+	"igo/config"
+	"igo/utils"
 )
 
 const (

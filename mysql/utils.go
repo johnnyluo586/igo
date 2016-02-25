@@ -258,7 +258,7 @@ func parseDateTime(str string, loc *time.Location) (t time.Time, err error) {
 		if str == base[:len(str)] {
 			return
 		}
-		t, err = time.Parse(timeFormat[:len(str)], str)
+		t, err = time.Parse(TimeFormat[:len(str)], str)
 	default:
 		err = fmt.Errorf("invalid time string: %s", str)
 		return

@@ -28,7 +28,7 @@ func (stmt *mysqlStmt) Close() error {
 		return driver.ErrBadConn
 	}
 
-	err := stmt.mc.writeCommandPacketUint32(comStmtClose, stmt.id)
+	err := stmt.mc.writeCommandPacketUint32(ComStmtClose, stmt.id)
 	stmt.mc = nil
 	return err
 }

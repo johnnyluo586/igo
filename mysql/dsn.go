@@ -117,7 +117,7 @@ func (cfg *Config) FormatDSN() string {
 		}
 	}
 
-	if col := cfg.Collation; col != defaultCollation && len(col) > 0 {
+	if col := cfg.Collation; col != DefaultCollation && len(col) > 0 {
 		if hasParam {
 			buf.WriteString("&collation=")
 		} else {
@@ -246,7 +246,7 @@ func ParseDSN(dsn string) (cfg *Config, err error) {
 	// New config with some default values
 	cfg = &Config{
 		Loc:       time.UTC,
-		Collation: defaultCollation,
+		Collation: DefaultCollation,
 	}
 
 	// [user[:password]@][net[(addr)]]/dbname[?param1=value1&paramN=valueN]
@@ -315,7 +315,7 @@ func ParseDSN(dsn string) (cfg *Config, err error) {
 		return nil, errInvalidDSNNoSlash
 	}
 
-	if cfg.InterpolateParams && unsafeCollations[cfg.Collation] {
+	if cfg.InterpolateParams && UnsafeCollations[cfg.Collation] {
 		return nil, errInvalidDSNUnsafeCollation
 	}
 
