@@ -4,13 +4,15 @@ import (
 	"sync/atomic"
 )
 
+var _ Counter = &ChanCount{}
+
 //ChanCount chan count will bolck when at max.
 type ChanCount struct {
 	max int64
 	ch  chan struct{}
 }
 
-func (c *ChanCount) Max(m int64) {
+func (c ChanCount) Max(m int64) {
 	c.max = m
 	if c.ch == nil {
 		c.ch = make(chan struct{}, c.max)
