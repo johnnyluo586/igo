@@ -19,7 +19,7 @@ type ServerConfig struct {
 	Passwd string `yaml:"passwd"`
 	Schema string `yaml:"schema"`
 
-	MaxClientConn int           `yaml:"maxClientConn"`
+	MaxClientConn int64         `yaml:"maxClientConn"`
 	WriteTimeout  time.Duration `yaml:"writeTimeout"`
 }
 

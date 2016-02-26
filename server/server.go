@@ -21,15 +21,30 @@ type Serverer interface {
 	Run()
 }
 
+//Counter count the client connection and limit
+type Counter interface {
+	Max(int64)   //set the max count.
+	Size() int64 //get the current size of counter.
+	Incr()       //incr will block when out of max count.
+	Decr()
+}
+
 //Server the server.
 type Server struct {
-	cfg *config.Config
+	cfg   *config.Config
+	count Counter
 }
 
 //NewServer new server
 func NewServer(conf *config.Config) *Server {
 	s := new(Server)
 	s.cfg = conf
+
+	//set counter
+	cnt := new(ChanCount)
+	cnt.Max(conf.Server.MaxClientConn)
+	s.count = cnt
+
 	return s
 }
 
@@ -46,19 +61,16 @@ func (s *Server) Run() error {
 	if err != nil {
 		return err
 	}
-	log.Info("Server Running on addr: ", addr.String())
+	log.Alertf("Server Running on addr: %v, max client: %v", addr.String(), s.cfg.Server.MaxClientConn)
 	for {
 		conn, err := ls.AcceptTCP()
 		if err != nil {
 			log.Error(err)
 			continue
 		}
+		s.count.Incr()
 		go s.handleClient(conn)
 	}
-
-}
-
-func (s *Server) Close() {
 
 }
 
@@ -74,9 +86,10 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	//new Client
 	client, die := newClient(conn, &s.cfg.Server)
 	defer func() {
-		log.Info("Client Close: ", client.ConnectID())
+		s.count.Decr()
+		log.Warnf("Client Close: %v, Current client: %v", client.ConnectID(), s.count.Size())
 	}()
-	log.Infof("New Connect from addr: %v, id: %v", client.Addr(), client.ConnectID())
+	log.Warnf("New Connect from addr: %v, id: %v, Current client: %v", client.Addr(), client.ConnectID(), s.count.Size())
 	if err := client.Handshake(); err != nil {
 		log.Error(err)
 		return
@@ -89,8 +102,9 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 		//handle the connection close
 		select {
 		case <-die:
-
 			return
 		}
 	}
 }
+
+func (s *Server) Close() {}
