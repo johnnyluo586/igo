@@ -3,12 +3,13 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
+)
+
+import (
 	"igo/config"
 	"igo/log"
 	"igo/server"
-	"os"
-	"os/signal"
-	"syscall"
 )
 
 var (
@@ -16,7 +17,7 @@ var (
         Welcome IGO!
 `
 
-	configFile = flag.String("config", "./igo.yaml", "Input the config file path")
+	configFile = flag.String("config", "./igo_config.toml", "Input the config file path")
 )
 
 func main() {
@@ -36,17 +37,5 @@ func main() {
 	}
 
 	//new and run server
-	srv := server.NewServer(cfg)
-
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-
-	go func() {
-		sig := <-sc
-		log.Warnf("Got signal [%d] to exit.", sig)
-		srv.Close()
-		os.Exit(0)
-	}()
-
-	log.Error(srv.Run())
+	log.Error(server.NewServer(cfg).Run())
 }

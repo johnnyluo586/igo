@@ -3,6 +3,9 @@ package server
 import (
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 import (
@@ -62,6 +65,8 @@ func (s *Server) Run() error {
 		return err
 	}
 	log.Alertf("Server Running on addr: %v, max client: %v", addr.String(), s.cfg.Server.MaxClientConn)
+	s.signal()
+
 	for {
 		conn, err := ls.AcceptTCP()
 		if err != nil {
@@ -107,4 +112,16 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	}
 }
 
-func (s *Server) Close() {}
+func (s *Server) close() {}
+
+func (s *Server) signal() {
+	sc := make(chan os.Signal, 1)
+	signal.Notify(sc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	go func() {
+		sig := <-sc
+		log.Warnf("Got signal [%d] to exit.", sig)
+		s.close()
+		os.Exit(0)
+	}()
+}
