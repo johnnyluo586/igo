@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 import (
@@ -85,6 +86,8 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	//set conn
 	conn.SetReadBuffer(rcvBuffer)
 	conn.SetWriteBuffer(sndBuffer)
+	// if the connect not send data to server out of readDeadline, it will cut the connect.
+	conn.SetReadDeadline(time.Now().Add(time.Second * readDeadline))
 	//conn.SetKeepAlive(true)
 	//conn.SetNoDelay(false)
 
