@@ -2,25 +2,33 @@ package config
 
 import (
 	"io/ioutil"
-	"time"
 
 	"github.com/BurntSushi/toml"
 )
 
+//Configer the config interface
+type Configer interface {
+	Parse() (*Config, error)
+}
+
 //Config all the config
 type Config struct {
-	Server ServerConfig `toml:"server"`
+	Server ServerConfig `toml:"Server"`
 }
 
 //ServerConfig the server config
 type ServerConfig struct {
 	Addr   string `toml:"addr"`
+	Schema string `toml:"schema"`
 	User   string `toml:"user"`
 	Passwd string `toml:"passwd"`
-	Schema string `toml:"schema"`
 
-	MaxClientConn int64         `toml:"maxClientConn"`
-	WriteTimeout  time.Duration `toml:"writeTimeout"`
+	MaxClient    int64 `toml:"maxClient"`
+	WriteTimeout int64 `toml:"writeTimeout"`
+	ReadTImeout  int64 `toml:"readTimeout"`
+
+	MaxIdleConn int `toml:"maxIdleConn"`
+	MaxConnNum  int `toml:"maxConnNum"`
 }
 
 //ParseConfig parse Config from toml file path.
@@ -29,10 +37,10 @@ func ParseConfig(fname string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := new(Config)
-	if err := toml.Unmarshal(content, c); err != nil {
+	cfg := ZKConfig{}
+	if err := toml.Unmarshal(content, &cfg); err != nil {
 		return nil, err
 	}
-	return c, nil
 
+	return cfg.Parse()
 }

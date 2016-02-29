@@ -1,7 +1,33 @@
-[server]
-addr = "127.0.0.1:6603"
-user = "root"
-passwd = "root"
-schema = "testdb"
-maxClientConn = 1024
-writeTimeout = 10
+# server config store in zk, the file only need config the zk params.
+#[Server]
+##服务器监听地址和端口
+#addr = "127.0.0.1:6603"
+##默认数据库名
+#schema = "testdb"
+##服务器用户名
+#user = "root"
+##服务器密码
+#passwd = "root"
+##最大客户端连接数， 超过之后排队等待或直接报错
+#maxClient = 1024
+##client <--> server; 超过多少秒没有收到包后， 服务器主动断开 
+#readTimeout = 10
+##server <--> mysql; 超过多少秒没有收到包后， 服务器主动断开 
+#writeTimeout = 10
+
+##database
+##数据库最大空闲连接数
+#maxIdleConn = 100
+##数据库最大连接数
+#maxConnNum = 1024
+
+
+#zookeeper地址
+zk_addrs = ["192.168.69.6:2181","192.168.69.6:2182"]
+#配置所在路径
+zk_path = "/path"
+#超时时间
+zk_timeout = 10
+
+
+
