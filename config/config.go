@@ -18,17 +18,20 @@ type Config struct {
 
 //ServerConfig the server config
 type ServerConfig struct {
-	Addr   string `toml:"addr"`
-	Schema string `toml:"schema"`
-	User   string `toml:"user"`
-	Passwd string `toml:"passwd"`
+	Addr      string `toml:"addr"`
+	DBName    string `toml:"dbname"`
+	User      string `toml:"user"`
+	Passwd    string `toml:"passwd"`
+	Collation string `toml:"collation"`
 
 	MaxClient    int64 `toml:"maxClient"`
 	WriteTimeout int64 `toml:"writeTimeout"`
-	ReadTImeout  int64 `toml:"readTimeout"`
+	ReadTimeout  int64 `toml:"readTimeout"`
 
 	MaxIdleConn int `toml:"maxIdleConn"`
 	MaxConnNum  int `toml:"maxConnNum"`
+
+	Strict bool
 }
 
 //ParseConfig parse Config from toml file path.

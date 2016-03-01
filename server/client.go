@@ -172,7 +172,7 @@ func (c *Client) readHandshakeRespone() error {
 
 	} else {
 		//if connect without database, use default db
-		db = c.cfg.Schema
+		db = c.cfg.DBName
 	}
 
 	if err := c.useDB(db); err != nil {

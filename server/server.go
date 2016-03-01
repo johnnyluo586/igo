@@ -46,7 +46,7 @@ func NewServer(conf *config.Config) *Server {
 
 	//set counter
 	cnt := new(ChanCount)
-	cnt.Max(conf.Server.MaxClientConn)
+	cnt.Max(conf.Server.MaxClient)
 	s.count = cnt
 
 	return s
@@ -65,7 +65,7 @@ func (s *Server) Run() error {
 	if err != nil {
 		return err
 	}
-	log.Alertf("Server Running on addr: %v, max client: %v", addr.String(), s.cfg.Server.MaxClientConn)
+	log.Alertf("Server Running on addr: %v, max client: %v", addr.String(), s.cfg.Server.MaxClient)
 	s.signal()
 
 	for {
