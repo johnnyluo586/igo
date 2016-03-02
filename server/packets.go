@@ -11,8 +11,229 @@ package server
 import (
 	"database/sql/driver"
 	"igo/log"
-	. "igo/mysql"
+	"igo/mysql"
+	"time"
 )
+
+//Packeter the packet interface
+type Packeter interface {
+	writePacket([]byte) error
+	readPacket() ([]byte, error)
+}
+
+/******************************************************************************
+*                           Packets Process                                   *
+******************************************************************************/
+// Packets documentation:
+// http://dev.mysql.com/doc/internals/en/client-server-protocol.html
+
+// Read packet to buffer 'data'
+func (c *Client) readPacket() ([]byte, error) {
+	var payload []byte
+	for {
+		// Read packet header
+		data, err := c.buf.readNext(4)
+		if err != nil {
+			log.Error(err)
+			c.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		// Packet Length [24 bit]
+		pktLen := int(uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16)
+
+		if pktLen < 1 {
+			log.Error(mysql.ErrMalformPkt)
+			c.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		// Check Packet Sync [8 bit]
+		if data[3] != c.sequence {
+			if data[3] > c.sequence {
+				return nil, mysql.ErrPktSyncMul
+			}
+			return nil, mysql.ErrPktSync
+		}
+		c.sequence++
+
+		// Read packet body [pktLen bytes]
+		data, err = c.buf.readNext(pktLen)
+		if err != nil {
+			log.Error(err)
+			c.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		isLastPacket := (pktLen < mysql.MaxPacketSize)
+
+		// Zero allocations for non-splitting packets
+		if isLastPacket && payload == nil {
+			return data, nil
+		}
+
+		payload = append(payload, data...)
+
+		if isLastPacket {
+			log.Debug("payload: ", string(payload))
+			return payload, nil
+		}
+	}
+}
+
+// Write packet buffer 'data'
+func (c *Client) writePacket(data []byte) error {
+	pktLen := len(data) - 4
+	if pktLen > c.maxPacketAllowed {
+		return mysql.ErrPktTooLarge
+	}
+
+	for {
+		var size int
+		if pktLen >= mysql.MaxPacketSize {
+			data[0] = 0xff
+			data[1] = 0xff
+			data[2] = 0xff
+			size = mysql.MaxPacketSize
+		} else {
+			data[0] = byte(pktLen)
+			data[1] = byte(pktLen >> 8)
+			data[2] = byte(pktLen >> 16)
+			size = pktLen
+		}
+		data[3] = c.sequence
+
+		// Write packet
+		if c.writeTimeout > 0 {
+			if err := c.netConn.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
+				return err
+			}
+		}
+
+		n, err := c.netConn.Write(data[:4+size])
+		if err == nil && n == 4+size {
+			c.sequence++
+			if size != mysql.MaxPacketSize {
+				return nil
+			}
+			pktLen -= size
+			data = data[size:]
+			continue
+		}
+
+		// Handle error
+		if err == nil { // n != len(data)
+			log.Error(mysql.ErrMalformPkt)
+		} else {
+			log.Error(err)
+		}
+		return driver.ErrBadConn
+	}
+}
+
+// Read packet to buffer 'data'
+func (mc *mysqlConn) readPacket() ([]byte, error) {
+	var payload []byte
+	for {
+		// Read packet header
+		data, err := mc.buf.readNext(4)
+		if err != nil {
+			log.Error(err)
+			mc.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		// Packet Length [24 bit]
+		pktLen := int(uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16)
+
+		if pktLen < 1 {
+			log.Error(mysql.ErrMalformPkt)
+			mc.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		// Check Packet Sync [8 bit]
+		if data[3] != mc.sequence {
+			if data[3] > mc.sequence {
+				return nil, mysql.ErrPktSyncMul
+			}
+			return nil, mysql.ErrPktSync
+		}
+		mc.sequence++
+
+		// Read packet body [pktLen bytes]
+		data, err = mc.buf.readNext(pktLen)
+		if err != nil {
+			log.Error(err)
+			mc.Close()
+			return nil, driver.ErrBadConn
+		}
+
+		isLastPacket := (pktLen < mysql.MaxPacketSize)
+
+		// Zero allocations for non-splitting packets
+		if isLastPacket && payload == nil {
+			return data, nil
+		}
+
+		payload = append(payload, data...)
+
+		if isLastPacket {
+			return payload, nil
+		}
+	}
+}
+
+// Write packet buffer 'data'
+func (mc *mysqlConn) writePacket(data []byte) error {
+	pktLen := len(data) - 4
+
+	if pktLen > mc.maxPacketAllowed {
+		return mysql.ErrPktTooLarge
+	}
+
+	for {
+		var size int
+		if pktLen >= mysql.MaxPacketSize {
+			data[0] = 0xff
+			data[1] = 0xff
+			data[2] = 0xff
+			size = mysql.MaxPacketSize
+		} else {
+			data[0] = byte(pktLen)
+			data[1] = byte(pktLen >> 8)
+			data[2] = byte(pktLen >> 16)
+			size = pktLen
+		}
+		data[3] = mc.sequence
+		log.Debug(mc.writeTimeout)
+		// Write packet
+		if mc.writeTimeout > 0 {
+			if err := mc.netConn.SetWriteDeadline(time.Now().Add(mc.writeTimeout)); err != nil {
+				return err
+			}
+		}
+		log.Debug(mc.netConn)
+		n, err := mc.netConn.Write(data[:4+size])
+		if err == nil && n == 4+size {
+			mc.sequence++
+			if size != mysql.MaxPacketSize {
+				return nil
+			}
+			pktLen -= size
+			data = data[size:]
+			continue
+		}
+
+		// Handle error
+		if err == nil { // n != len(data)
+			log.Error(mysql.ErrMalformPkt)
+		} else {
+			log.Error(err)
+		}
+		return driver.ErrBadConn
+	}
+}
 
 /******************************************************************************
 *                             Command Packets                                 *
@@ -25,7 +246,7 @@ func (c *Client) writeCommandPacket(command byte) error {
 	data := c.buf.takeSmallBuffer(4 + 1)
 	if data == nil {
 		// can not take the buffer. Something must be wrong with the connection
-		log.Error(ErrBusyBuffer)
+		log.Error(mysql.ErrBusyBuffer)
 		return driver.ErrBadConn
 	}
 
@@ -44,7 +265,7 @@ func (c *Client) writeCommandPacketStr(command byte, arg string) error {
 	data := c.buf.takeBuffer(pktLen + 4)
 	if data == nil {
 		// can not take the buffer. Something must be wrong with the connection
-		log.Error(ErrBusyBuffer)
+		log.Error(mysql.ErrBusyBuffer)
 		return driver.ErrBadConn
 	}
 
@@ -65,7 +286,7 @@ func (c *Client) writeCommandPacketUint32(command byte, arg uint32) error {
 	data := c.buf.takeSmallBuffer(4 + 1 + 4)
 	if data == nil {
 		// can not take the buffer. Something must be wrong with the connection
-		log.Error(ErrBusyBuffer)
+		log.Error(mysql.ErrBusyBuffer)
 		return driver.ErrBadConn
 	}
 

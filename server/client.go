@@ -2,8 +2,8 @@ package server
 
 import (
 	"bytes"
-	"database/sql/driver"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -17,7 +17,9 @@ import (
 )
 
 var (
-	baseConnectID = uint32(1000) //atomic
+	baseConnectID    = uint32(1000) //atomic
+	errNotfoundDB    = errors.New("not found db")
+	errCannotGetConn = errors.New("can not get conn")
 )
 
 //Client the client connection object
@@ -55,15 +57,19 @@ func newClient(conn *net.TCPConn, conf *config.ServerConfig) (*Client, chan stru
 	return c, c.die
 }
 
+//Addr addr
 func (c *Client) Addr() string {
 	return c.netConn.RemoteAddr().String()
 }
 
+//ConnectID connect id
 func (c *Client) ConnectID() uint32 {
 	return c.connectID
 }
 
 func (c *Client) close() { close(c.die) }
+
+//Close close
 func (c *Client) Close() { close(c.die) }
 
 /******************************************************************************
@@ -80,7 +86,9 @@ func (c *Client) Handshake() error {
 		c.writeError(err)
 		return err
 	}
+	log.Debug(222)
 	c.writeOK()
+	log.Debug(333)
 	c.sequence = 0
 	return nil
 }
@@ -174,7 +182,7 @@ func (c *Client) readHandshakeRespone() error {
 		//if connect without database, use default db
 		db = c.cfg.DBName
 	}
-
+	log.Debug("c.useDB(db)")
 	if err := c.useDB(db); err != nil {
 		return err
 	}
@@ -216,115 +224,6 @@ func (c *Client) writeError(e error) error {
 }
 
 /******************************************************************************
-*                           Packets Process                                   *
-******************************************************************************/
-// Packets documentation:
-// http://dev.mysql.com/doc/internals/en/client-server-protocol.html
-
-// Read packet to buffer 'data'
-func (c *Client) readPacket() ([]byte, error) {
-	var payload []byte
-	for {
-		// Read packet header
-		data, err := c.buf.readNext(4)
-		if err != nil {
-			log.Error(err)
-			c.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		// Packet Length [24 bit]
-		pktLen := int(uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16)
-
-		if pktLen < 1 {
-			log.Error(mysql.ErrMalformPkt)
-			c.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		// Check Packet Sync [8 bit]
-		if data[3] != c.sequence {
-			if data[3] > c.sequence {
-				return nil, mysql.ErrPktSyncMul
-			}
-			return nil, mysql.ErrPktSync
-		}
-		c.sequence++
-
-		// Read packet body [pktLen bytes]
-		data, err = c.buf.readNext(pktLen)
-		if err != nil {
-			log.Error(err)
-			c.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		isLastPacket := (pktLen < mysql.MaxPacketSize)
-
-		// Zero allocations for non-splitting packets
-		if isLastPacket && payload == nil {
-			return data, nil
-		}
-
-		payload = append(payload, data...)
-
-		if isLastPacket {
-			return payload, nil
-		}
-	}
-}
-
-// Write packet buffer 'data'
-func (c *Client) writePacket(data []byte) error {
-	pktLen := len(data) - 4
-	if pktLen > c.maxPacketAllowed {
-		return mysql.ErrPktTooLarge
-	}
-
-	for {
-		var size int
-		if pktLen >= mysql.MaxPacketSize {
-			data[0] = 0xff
-			data[1] = 0xff
-			data[2] = 0xff
-			size = mysql.MaxPacketSize
-		} else {
-			data[0] = byte(pktLen)
-			data[1] = byte(pktLen >> 8)
-			data[2] = byte(pktLen >> 16)
-			size = pktLen
-		}
-		data[3] = c.sequence
-
-		// Write packet
-		if c.writeTimeout > 0 {
-			if err := c.netConn.SetWriteDeadline(time.Now().Add(c.writeTimeout)); err != nil {
-				return err
-			}
-		}
-
-		n, err := c.netConn.Write(data[:4+size])
-		if err == nil && n == 4+size {
-			c.sequence++
-			if size != mysql.MaxPacketSize {
-				return nil
-			}
-			pktLen -= size
-			data = data[size:]
-			continue
-		}
-
-		// Handle error
-		if err == nil { // n != len(data)
-			log.Error(mysql.ErrMalformPkt)
-		} else {
-			log.Error(err)
-		}
-		return driver.ErrBadConn
-	}
-}
-
-/******************************************************************************
 *                          Dispatch Process                                   *
 ******************************************************************************/
 
@@ -346,15 +245,16 @@ func (c *Client) Accept() {
 
 func (c *Client) dispatch(cmd byte, data []byte) error {
 	log.Debugf("dispatch: %v %v", cmd, string(data))
+	var err error
 	switch cmd {
 	case mysql.ComQuery:
-		c.handleQuery(data)
+		err = c.handleQuery(data)
 
 	case mysql.ComInitDB:
-		c.handleUseDB(data)
+		err = c.handleUseDB(data)
 
 	case mysql.ComFieldList:
-		c.handleFieldList(data)
+		err = c.handleFieldList(data)
 
 	case mysql.ComStmtClose,
 		mysql.ComStmtExecute,
@@ -362,12 +262,13 @@ func (c *Client) dispatch(cmd byte, data []byte) error {
 		mysql.ComStmtPrepare,
 		mysql.ComStmtReset,
 		mysql.ComStmtSendLongData:
-		c.handleStmt(data)
+		err = c.handleStmt(data)
 
 	default:
 		return fmt.Errorf("unsurport cmd %v  %v", cmd, string(data))
 	}
-	return nil
+
+	return err
 }
 
 //----------------------------------------------------------
@@ -375,22 +276,82 @@ func (c *Client) dispatch(cmd byte, data []byte) error {
 //----------------------------------------------------------
 
 //handleQuery
-func (c *Client) handleQuery(data []byte) error { return nil }
+func (c *Client) handleQuery(data []byte) error {
+	db := GetDB(string(data))
+	if db == nil {
+		return errNotfoundDB
+	}
+	conn := db.getConn()
+	if conn == nil {
+		return errCannotGetConn
+	}
+	defer db.putConn(conn)
+	res, err := conn.Exec(data)
+	if err != nil {
+		return err
+	}
+	if err = c.writePacket(res); err != nil {
+		log.Error("handleQuery: ", err)
+		return err
+	}
+
+	return nil
+}
 
 //handleUseDB
-func (c *Client) handleUseDB(data []byte) error { return nil }
+func (c *Client) handleUseDB(data []byte) error {
+	log.Debug(c.dbname)
+	return c.useDB(string(data[8:]))
+}
 
 //handleFieldList
-func (c *Client) handleFieldList(data []byte) error { return nil }
+func (c *Client) handleFieldList(data []byte) error {
+	db := GetDB(string(data))
+	if db == nil {
+		return errNotfoundDB
+	}
+	conn := db.getConn()
+	if conn == nil {
+		return errCannotGetConn
+	}
+	defer db.putConn(conn)
+	res, err := conn.Exec(data)
+	if err != nil {
+		return err
+	}
+	if err = c.writePacket(res); err != nil {
+		log.Error("handleFieldList: ", err)
+		return err
+	}
+	return nil
+}
 
 //handleStmt
 func (c *Client) handleStmt(data []byte) error {
 	return nil
 }
 
-func (c *Client) useDB(db string) error {
-	c.dbname = db
-	//TODO usedb in backend
+func (c *Client) useDB(name string) error {
+	data := []byte("use " + name)
+	db := GetDB(string(data))
+	if db == nil {
+		return errNotfoundDB
+	}
+	conn := db.getConn()
+	if conn == nil {
+		return errCannotGetConn
+	}
+	defer db.putConn(conn)
 
+	res, err := conn.Exec(data)
+	if err != nil {
+		return err
+	}
+	if err = c.writePacket(res); err != nil {
+		log.Error("useDB", err)
+		return err
+	}
+
+	c.dbname = string(data)
 	return nil
 }

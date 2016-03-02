@@ -16,6 +16,7 @@ import (
 )
 
 const defaultBufSize = 4096
+const defaultTimeout = 10
 
 // A buffer which is used for both reading and writing.
 // This is possible since communication on each connection is synchronous.
@@ -33,8 +34,9 @@ type buffer struct {
 func newBuffer(nc net.Conn) buffer {
 	var b [defaultBufSize]byte
 	return buffer{
-		buf: b[:],
-		nc:  nc,
+		buf:     b[:],
+		nc:      nc,
+		timeout: time.Duration(defaultTimeout * time.Second),
 	}
 }
 

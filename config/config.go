@@ -14,6 +14,7 @@ type Configer interface {
 //Config all the config
 type Config struct {
 	Server ServerConfig `toml:"Server"`
+	// Redis  ServerConfig `toml:"Server.redis"`
 }
 
 //ServerConfig the server config
@@ -27,9 +28,9 @@ type ServerConfig struct {
 	MaxClient    int64 `toml:"maxClient"`
 	WriteTimeout int64 `toml:"writeTimeout"`
 	ReadTimeout  int64 `toml:"readTimeout"`
-
-	MaxIdleConn int `toml:"maxIdleConn"`
-	MaxConnNum  int `toml:"maxConnNum"`
+	MaxLifeTime  int64 `toml:"maxLifeTmie"`
+	MaxIdleConn  int   `toml:"maxIdleConn"`
+	MaxConnNum   int   `toml:"maxConnNum"`
 
 	Strict bool
 }

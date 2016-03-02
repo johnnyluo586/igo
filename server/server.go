@@ -21,16 +21,9 @@ const (
 	readDeadline = 30 //s
 )
 
+//Serverer the server interface
 type Serverer interface {
-	Run()
-}
-
-//Counter count the client connection and limit
-type Counter interface {
-	Max(int64)   //set the max count.
-	Size() int64 //get the current size of counter.
-	Incr()       //incr will block when out of max count.
-	Decr()
+	Run() //run the server
 }
 
 //Server the server.
@@ -46,7 +39,7 @@ func NewServer(conf *config.Config) *Server {
 
 	//set counter
 	cnt := new(ChanCount)
-	cnt.Max(conf.Server.MaxClient)
+	cnt.SetMax(conf.Server.MaxClient)
 	s.count = cnt
 
 	return s
@@ -54,6 +47,9 @@ func NewServer(conf *config.Config) *Server {
 
 //Run  run the server
 func (s *Server) Run() error {
+
+	s.startup(&s.cfg.Server)
+
 	if s.cfg.Server.Addr == "" {
 		return fmt.Errorf("addr is not set")
 	}
@@ -75,6 +71,7 @@ func (s *Server) Run() error {
 			continue
 		}
 		s.count.Incr()
+
 		go s.handleClient(conn)
 	}
 
@@ -106,7 +103,7 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 
 	for {
 		client.Accept()
-
+		log.Debug("accept ")
 		//handle the connection close
 		select {
 		case <-die:
@@ -127,4 +124,8 @@ func (s *Server) signal() {
 		s.close()
 		os.Exit(0)
 	}()
+}
+
+func (s *Server) startup(conf *config.ServerConfig) {
+	InitDB(conf)
 }

@@ -29,14 +29,15 @@ type MysqlDB struct {
 	numOpen     int
 }
 
-func Open(addr, user, passwd, db string, idleConn, maxConn int) (*MysqlDB, error) {
+func Open(conf *config.ServerConfig) (*MysqlDB, error) {
 	m := &MysqlDB{
-		addr:    addr,
-		user:    user,
-		passwd:  passwd,
-		db:      db,
-		maxIdle: idleConn,
-		maxOpen: maxConn,
+		addr:        conf.Addr,
+		user:        conf.User,
+		passwd:      conf.Passwd,
+		db:          conf.DBName,
+		maxIdle:     conf.MaxIdleConn,
+		maxOpen:     conf.MaxConnNum,
+		maxLifetime: time.Duration(conf.MaxLifeTime),
 	}
 	m.freeConn = make(chan *mysqlConn, m.maxOpen)
 	m.openCh = make(chan struct{}, m.maxOpen)
@@ -44,6 +45,7 @@ func Open(addr, user, passwd, db string, idleConn, maxConn int) (*MysqlDB, error
 	go m.opener()
 	for i := 0; i < m.maxIdle; i++ {
 		m.openCh <- struct{}{}
+
 	}
 
 	return m, nil
@@ -57,6 +59,7 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 	mc := &mysqlConn{
 		maxPacketAllowed: mysql.MaxPacketSize,
 		maxWriteSize:     mysql.MaxPacketSize - 1,
+		writeTimeout:     defaultWriteTimeout,
 		createdAt:        nowFunc(),
 	}
 	mc.cfg = &config.ServerConfig{
@@ -99,20 +102,22 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 		mc.cleanup()
 		return nil, err
 	}
-
+	log.Debug("readInitPacket")
 	// Send Client Authentication Packet
 	if err = mc.writeAuthPacket(cipher); err != nil {
 		mc.cleanup()
 		return nil, err
 	}
+	log.Debug("writeAuthPacket")
 
 	// Handle response to auth packet, switch methods if possible
 	if err := mc.readInitOK(); err != nil {
 		mc.cleanup()
 		return nil, err
 	}
+	log.Debug("readInitOK")
 	m.numOpen++
-
+	log.Debug("open newConn:", m.numOpen)
 	return mc, nil
 }
 
@@ -140,14 +145,19 @@ func (m *MysqlDB) getConn() *mysqlConn {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.maybeOpenNew()
-	select {
-	case v, ok := <-m.freeConn:
-		if ok {
-			return v
-		}
-	default:
-		log.Error("getConn case default, freeConn is empty and maxOpen at max.", stack())
-		return nil
+	// select {
+	// case v, ok := <-m.freeConn:
+	// 	if ok {
+	// 		return v
+	// 	}
+	// default:
+	// 	log.Error("getConn case default, freeConn is empty and maxOpen at max.\n", stack())
+	// 	return nil
+	// }
+	log.Debugf("m.freeConn: cap:%v, len:%v", cap(m.freeConn), len(m.freeConn))
+	v, ok := <-m.freeConn
+	if ok {
+		return v
 	}
 	return nil
 }
@@ -155,11 +165,13 @@ func (m *MysqlDB) getConn() *mysqlConn {
 func (m *MysqlDB) putConn(mc *mysqlConn) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.maxIdle < m.numOpen && mc.expired(m.maxLifetime) {
-		m.numOpen--
-		mc.Close()
-		log.Debug("Close mc, idle:%v, open:%v, expired", m.maxIdle, m.numOpen)
-		return nil
+	if m.maxLifetime > 0 {
+		if m.maxIdle < m.numOpen && mc.expired(m.maxLifetime) {
+			m.numOpen--
+			mc.Close()
+			log.Debug("Close mc, idle:%v, open:%v, expired", m.maxIdle, m.numOpen)
+			return nil
+		}
 	}
 	select {
 	case m.freeConn <- mc:

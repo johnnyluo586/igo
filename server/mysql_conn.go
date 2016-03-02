@@ -32,110 +32,6 @@ type mysqlConn struct {
 	createdAt        time.Time
 }
 
-// Read packet to buffer 'data'
-func (mc *mysqlConn) readPacket() ([]byte, error) {
-	var payload []byte
-	for {
-		// Read packet header
-		data, err := mc.buf.readNext(4)
-		if err != nil {
-			log.Error(err)
-			mc.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		// Packet Length [24 bit]
-		pktLen := int(uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16)
-
-		if pktLen < 1 {
-			log.Error(mysql.ErrMalformPkt)
-			mc.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		// Check Packet Sync [8 bit]
-		if data[3] != mc.sequence {
-			if data[3] > mc.sequence {
-				return nil, mysql.ErrPktSyncMul
-			}
-			return nil, mysql.ErrPktSync
-		}
-		mc.sequence++
-
-		// Read packet body [pktLen bytes]
-		data, err = mc.buf.readNext(pktLen)
-		if err != nil {
-			log.Error(err)
-			mc.Close()
-			return nil, driver.ErrBadConn
-		}
-
-		isLastPacket := (pktLen < mysql.MaxPacketSize)
-
-		// Zero allocations for non-splitting packets
-		if isLastPacket && payload == nil {
-			return data, nil
-		}
-
-		payload = append(payload, data...)
-
-		if isLastPacket {
-			return payload, nil
-		}
-	}
-}
-
-// Write packet buffer 'data'
-func (mc *mysqlConn) writePacket(data []byte) error {
-	pktLen := len(data) - 4
-
-	if pktLen > mc.maxPacketAllowed {
-		return mysql.ErrPktTooLarge
-	}
-
-	for {
-		var size int
-		if pktLen >= mysql.MaxPacketSize {
-			data[0] = 0xff
-			data[1] = 0xff
-			data[2] = 0xff
-			size = mysql.MaxPacketSize
-		} else {
-			data[0] = byte(pktLen)
-			data[1] = byte(pktLen >> 8)
-			data[2] = byte(pktLen >> 16)
-			size = pktLen
-		}
-		data[3] = mc.sequence
-
-		// Write packet
-		if mc.writeTimeout > 0 {
-			if err := mc.netConn.SetWriteDeadline(time.Now().Add(mc.writeTimeout)); err != nil {
-				return err
-			}
-		}
-
-		n, err := mc.netConn.Write(data[:4+size])
-		if err == nil && n == 4+size {
-			mc.sequence++
-			if size != mysql.MaxPacketSize {
-				return nil
-			}
-			pktLen -= size
-			data = data[size:]
-			continue
-		}
-
-		// Handle error
-		if err == nil { // n != len(data)
-			log.Error(mysql.ErrMalformPkt)
-		} else {
-			log.Error(err)
-		}
-		return driver.ErrBadConn
-	}
-}
-
 func (mc *mysqlConn) Close() {
 	if mc.netConn != nil {
 		mc.netConn.Close()
@@ -151,14 +47,16 @@ func (mc *mysqlConn) expired(timeout time.Duration) bool {
 	return mc.createdAt.Add(timeout).Before(nowFunc())
 }
 
-//Cmd execute the cmd, like init_db, stmt, and return the read packet.
-func (mc *mysqlConn) Cmd(data []byte) ([]byte, error) {
-
-	return nil, nil
-}
-
-func (mc *mysqlConn) Query(data []byte) ([]byte, error) {
-	return nil, nil
+//Exec execute the cmd,and return the read packet.
+func (mc *mysqlConn) Exec(data []byte) ([]byte, error) {
+	if err := mc.writePacket(data); err != nil {
+		return nil, err
+	}
+	r, err := mc.readPacket()
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
 }
 
 // Error Packet
@@ -225,9 +123,8 @@ func (mc *mysqlConn) readInitPacket() ([]byte, error) {
 		return nil, mysql.ErrOldProtocol
 	}
 	// if mc.flags&mysql.ClientSSL == 0 && mc.cfg.tls != nil {
-	if mc.flags&mysql.ClientSSL == 0 {
-		return nil, mysql.ErrNoTLS
-	}
+	// 	return nil, mysql.ErrNoTLS
+	// }
 	pos += 2
 
 	if len(data) > pos {
@@ -281,9 +178,9 @@ func (mc *mysqlConn) writeAuthPacket(cipher []byte) error {
 		mysql.ClientSecureConn |
 		mysql.ClientLongPassword |
 		mysql.ClientTransactions |
-		mysql.ClientLocalFiles |
-		mysql.ClientPluginAuth |
-		mysql.ClientMultiResults |
+		//mysql.ClientLocalFiles |
+		//mysql.ClientPluginAuth |
+		//mysql.ClientMultiResults |
 		mc.flags&mysql.ClientLongFlag
 
 	// if mc.cfg.ClientFoundRows {
@@ -390,7 +287,10 @@ func (mc *mysqlConn) writeAuthPacket(cipher []byte) error {
 }
 
 func (mc *mysqlConn) readInitOK() error {
+	log.Debug("readInitOK 1")
+
 	data, err := mc.readPacket()
+	log.Debug("readInitOK 122")
 	if err == nil {
 		// packet indicator
 		switch data[0] {
