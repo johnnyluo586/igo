@@ -102,22 +102,18 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 		mc.cleanup()
 		return nil, err
 	}
-	log.Debug("readInitPacket")
 	// Send Client Authentication Packet
 	if err = mc.writeAuthPacket(cipher); err != nil {
 		mc.cleanup()
 		return nil, err
 	}
-	log.Debug("writeAuthPacket")
 
 	// Handle response to auth packet, switch methods if possible
 	if err := mc.readInitOK(); err != nil {
 		mc.cleanup()
 		return nil, err
 	}
-	log.Debug("readInitOK")
 	m.numOpen++
-	log.Debug("open newConn:", m.numOpen)
 	return mc, nil
 }
 
@@ -145,20 +141,20 @@ func (m *MysqlDB) getConn() *mysqlConn {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.maybeOpenNew()
-	// select {
-	// case v, ok := <-m.freeConn:
-	// 	if ok {
-	// 		return v
-	// 	}
-	// default:
-	// 	log.Error("getConn case default, freeConn is empty and maxOpen at max.\n", stack())
-	// 	return nil
-	// }
-	log.Debugf("m.freeConn: cap:%v, len:%v", cap(m.freeConn), len(m.freeConn))
-	v, ok := <-m.freeConn
-	if ok {
-		return v
+	select {
+	case v, ok := <-m.freeConn:
+		if ok {
+			return v
+		}
+	default:
+		log.Error("getConn case default, freeConn is empty and maxOpen at max.\n", stack())
+		return nil
 	}
+	// log.Debugf("m.freeConn: cap:%v, len:%v", cap(m.freeConn), len(m.freeConn))
+	// v, ok := <-m.freeConn
+	// if ok {
+	// 	return v
+	// }
 	return nil
 }
 
@@ -169,7 +165,7 @@ func (m *MysqlDB) putConn(mc *mysqlConn) error {
 		if m.maxIdle < m.numOpen && mc.expired(m.maxLifetime) {
 			m.numOpen--
 			mc.Close()
-			log.Debug("Close mc, idle:%v, open:%v, expired", m.maxIdle, m.numOpen)
+			log.Debugf("Close mc by expired, maxIdle:%v, open:%v", m.maxIdle, m.numOpen)
 			return nil
 		}
 	}

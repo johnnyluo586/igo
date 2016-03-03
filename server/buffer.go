@@ -62,6 +62,7 @@ func (b *buffer) fill(need int) error {
 	b.idx = 0
 
 	for {
+		// log.Debugf("fill timeout:%v, %v -> %v", b.timeout, b.nc.LocalAddr().String(), b.nc.RemoteAddr().String())
 		if b.timeout > 0 {
 			if err := b.nc.SetReadDeadline(time.Now().Add(b.timeout)); err != nil {
 				return err

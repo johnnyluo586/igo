@@ -67,10 +67,11 @@ func (c *Client) ConnectID() uint32 {
 	return c.connectID
 }
 
-func (c *Client) close() { close(c.die) }
-
-//Close close
-func (c *Client) Close() { close(c.die) }
+func (c *Client) close() {
+	if _, ok := <-c.die; ok {
+		close(c.die)
+	}
+}
 
 /******************************************************************************
 *                           Handshake Process                                 *
@@ -86,9 +87,7 @@ func (c *Client) Handshake() error {
 		c.writeError(err)
 		return err
 	}
-	log.Debug(222)
 	c.writeOK()
-	log.Debug(333)
 	c.sequence = 0
 	return nil
 }
@@ -176,16 +175,17 @@ func (c *Client) readHandshakeRespone() error {
 		}
 
 		db = string(data[pos : pos+bytes.IndexByte(data[pos:], 0)])
-		pos += len(c.dbname) + 1
+		pos += len(db) + 1
 
 	} else {
 		//if connect without database, use default db
 		db = c.cfg.DBName
 	}
-	log.Debug("c.useDB(db)")
-	if err := c.useDB(db); err != nil {
-		return err
-	}
+	log.Debug("db ", db)
+	c.dbname = db
+	// if err := c.useDB(db); err != nil {
+	// 	return err
+	// }
 
 	return nil
 
@@ -235,7 +235,7 @@ func (c *Client) Accept() {
 		c.close()
 		return
 	}
-	if err := c.dispatch(data[0], data[1:]); err != nil {
+	if err := c.dispatch(data); err != nil {
 		log.Error(err)
 		c.close()
 		return
@@ -243,10 +243,12 @@ func (c *Client) Accept() {
 	c.sequence = 0
 }
 
-func (c *Client) dispatch(cmd byte, data []byte) error {
-	log.Debugf("dispatch: %v %v", cmd, string(data))
+func (c *Client) dispatch(data []byte) error {
+	log.Debugf("dispatch cmd:%v, data: %v", data[0], string(data[1:]))
 	var err error
-	switch cmd {
+	switch data[0] {
+	case mysql.ComQuit:
+		err = c.handleQuit()
 	case mysql.ComQuery:
 		err = c.handleQuery(data)
 
@@ -265,10 +267,15 @@ func (c *Client) dispatch(cmd byte, data []byte) error {
 		err = c.handleStmt(data)
 
 	default:
-		return fmt.Errorf("unsurport cmd %v  %v", cmd, string(data))
+		return fmt.Errorf("unsurport cmd %v  %v", data[0], string(data))
 	}
 
 	return err
+}
+
+func (c *Client) handleQuit() error {
+	log.Debug("handleQuit")
+	return nil
 }
 
 //----------------------------------------------------------
@@ -287,21 +294,18 @@ func (c *Client) handleQuery(data []byte) error {
 	}
 	defer db.putConn(conn)
 	res, err := conn.Exec(data)
+	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	if err != nil {
 		return err
 	}
-	if err = c.writePacket(res); err != nil {
-		log.Error("handleQuery: ", err)
-		return err
-	}
-
-	return nil
+	err = c.writeResultPackets(res)
+	return err
 }
 
 //handleUseDB
 func (c *Client) handleUseDB(data []byte) error {
-	log.Debug(c.dbname)
-	return c.useDB(string(data[8:]))
+	log.Debug("handleUseDB", c.dbname)
+	return c.useDB(string(data[4:]))
 }
 
 //handleFieldList
@@ -319,11 +323,8 @@ func (c *Client) handleFieldList(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err = c.writePacket(res); err != nil {
-		log.Error("handleFieldList: ", err)
-		return err
-	}
-	return nil
+	err = c.writeResultPackets(res)
+	return err
 }
 
 //handleStmt
@@ -347,11 +348,10 @@ func (c *Client) useDB(name string) error {
 	if err != nil {
 		return err
 	}
-	if err = c.writePacket(res); err != nil {
-		log.Error("useDB", err)
-		return err
+	err = c.writeResultPackets(res)
+	if err == nil {
+		c.dbname = string(data)
 	}
+	return err
 
-	c.dbname = string(data)
-	return nil
 }

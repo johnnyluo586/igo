@@ -47,16 +47,99 @@ func (mc *mysqlConn) expired(timeout time.Duration) bool {
 	return mc.createdAt.Add(timeout).Before(nowFunc())
 }
 
-//Exec execute the cmd,and return the read packet.
-func (mc *mysqlConn) Exec(data []byte) ([]byte, error) {
-	if err := mc.writePacket(data); err != nil {
+//Exec execute the cmd,and return the read all the  packet.
+func (mc *mysqlConn) Exec(data []byte) ([][]byte, error) {
+	cmd := data[0]
+	arg := string(data[1:])
+	if err := mc.writeCommandPacketStr(cmd, arg); err != nil {
 		return nil, err
 	}
-	r, err := mc.readPacket()
+
+	reshd, resLen, err := mc.readResultSetHeaderPacket()
 	if err != nil {
 		return nil, err
 	}
-	return r, nil
+	log.Debug("resLen  ", resLen)
+	result := make([][]byte, 0, resLen+1)
+	result = append(result, reshd)
+
+	if resLen > 0 {
+		// columns
+		if result, err = mc.readResultSetPacket(result, resLen); err != nil {
+			return nil, err
+		}
+		// rows
+		if result, err = mc.readResultSetPacket(result, resLen); err != nil {
+			return nil, err
+		}
+	}
+	//log.Debug("result:", result)
+	return result, err
+}
+
+func (mc *mysqlConn) readResultSetPacket(res [][]byte, count int) ([][]byte, error) {
+
+	for i := 0; ; i++ {
+		data, err := mc.readPacket()
+		if err != nil {
+			return nil, err
+		}
+		res = append(res, data)
+		log.Debug("res:", res)
+
+		// EOF Packet
+		if data[0] == mysql.HeaderEOF && (len(data) == 5 || len(data) == 1) {
+			if i == count {
+				return res, nil
+			}
+			return res, fmt.Errorf("column count mismatch n:%d len:%d", count, cap(res))
+		}
+	}
+}
+
+// Reads Packets until EOF-Packet or an Error appears. Returns count of Packets read
+func (mc *mysqlConn) readUntilEOF() error {
+	for {
+		data, err := mc.readPacket()
+
+		// No Err and no EOF Packet
+		if err == nil && data[0] != mysql.HeaderEOF {
+			continue
+		}
+		if err == nil && data[0] == mysql.HeaderEOF && len(data) == 5 {
+			mc.status = readStatus(data[3:])
+		}
+
+		return err // Err or EOF
+	}
+}
+
+// Result Set Header Packet
+// http://dev.mysql.com/doc/internals/en/com-query-response.html#packet-ProtocolText::Resultset
+func (mc *mysqlConn) readResultSetHeaderPacket() ([]byte, int, error) {
+	data, err := mc.readPacket()
+	if err == nil {
+		switch data[0] {
+
+		case mysql.HeaderOK:
+			return data, 0, mc.handleOkPacket(data)
+
+		case mysql.HeaderERR:
+			return data, 0, mc.handleErrorPacket(data)
+
+		case mysql.HeaderLocalInFile:
+			return data, 0, fmt.Errorf("not support")
+		}
+
+		// column count
+		num, _, n := readLengthEncodedInteger(data)
+		if n-len(data) == 0 {
+			return data, int(num), nil
+		}
+
+		return data, 0, mysql.ErrMalformPkt
+	}
+	return data, 0, err
 }
 
 // Error Packet
@@ -287,10 +370,7 @@ func (mc *mysqlConn) writeAuthPacket(cipher []byte) error {
 }
 
 func (mc *mysqlConn) readInitOK() error {
-	log.Debug("readInitOK 1")
-
 	data, err := mc.readPacket()
-	log.Debug("readInitOK 122")
 	if err == nil {
 		// packet indicator
 		switch data[0] {

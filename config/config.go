@@ -19,7 +19,8 @@ type Config struct {
 
 //ServerConfig the server config
 type ServerConfig struct {
-	Addr      string `toml:"addr"`
+	Listen    string `toml:"listen"`
+	Addr      string `toml:"dbaddr"`
 	DBName    string `toml:"dbname"`
 	User      string `toml:"user"`
 	Passwd    string `toml:"passwd"`

@@ -4,11 +4,15 @@ import (
 	"database/sql"
 	"testing"
 )
-
-//_ "github.com/go-sql-driver/mysql"
+import (
+	_ "github.com/go-sql-driver/mysql"
+)
 
 func Test_Conn(t *testing.T) {
-	db, err := sql.Open("mysql", "root:root@tcp(127.0.0.1:6603)/testdb")
+	db, err := sql.Open("mysql", "root:root@tcp(172.20.4.11:3306)/testdb")
+	db.SetMaxIdleConns(1)
+	db.SetMaxOpenConns(1)
+
 	defer db.Close()
 	rows, err := db.Query("select * from test_table")
 	if err != nil {

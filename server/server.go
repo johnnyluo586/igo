@@ -50,10 +50,10 @@ func (s *Server) Run() error {
 
 	s.startup(&s.cfg.Server)
 
-	if s.cfg.Server.Addr == "" {
+	if s.cfg.Server.Listen == "" {
 		return fmt.Errorf("addr is not set")
 	}
-	addr, err := net.ResolveTCPAddr("tcp", s.cfg.Server.Addr)
+	addr, err := net.ResolveTCPAddr("tcp", s.cfg.Server.Listen)
 	if err != nil {
 		return err
 	}
@@ -62,6 +62,7 @@ func (s *Server) Run() error {
 		return err
 	}
 	log.Alertf("Server Running on addr: %v, max client: %v", addr.String(), s.cfg.Server.MaxClient)
+
 	s.signal()
 
 	for {
@@ -86,15 +87,16 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	// if the connect not send data to server out of readDeadline, it will cut the connect.
 	conn.SetReadDeadline(time.Now().Add(time.Second * readDeadline))
 	//conn.SetKeepAlive(true)
-	//conn.SetNoDelay(false)
+	conn.SetNoDelay(false)
 
 	//new Client
 	client, die := newClient(conn, &s.cfg.Server)
 	defer func() {
 		s.count.Decr()
-		log.Warnf("Client Close: %v, Current client: %v", client.ConnectID(), s.count.Size())
+		log.Warnf("Client Close: %v, CurNum: %v", client.ConnectID(), s.count.Size())
 	}()
-	log.Warnf("New Connect from addr: %v, id: %v, Current client: %v", client.Addr(), client.ConnectID(), s.count.Size())
+	log.Warnf("New Client: %v, id: %v, CurNum: %v", client.Addr(), client.ConnectID(), s.count.Size())
+
 	if err := client.Handshake(); err != nil {
 		log.Error(err)
 		return
@@ -103,7 +105,6 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 
 	for {
 		client.Accept()
-		log.Debug("accept ")
 		//handle the connection close
 		select {
 		case <-die:
@@ -112,7 +113,9 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	}
 }
 
-func (s *Server) close() {}
+func (s *Server) close() {
+
+}
 
 func (s *Server) signal() {
 	sc := make(chan os.Signal, 1)
