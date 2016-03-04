@@ -12,6 +12,7 @@ import (
 
 var nowFunc = time.Now
 
+//MysqlDB mysql connecter.
 type MysqlDB struct {
 	mu sync.Mutex
 
@@ -29,6 +30,7 @@ type MysqlDB struct {
 	numOpen     int
 }
 
+//Open open with config.
 func Open(conf *config.ServerConfig) (*MysqlDB, error) {
 	m := &MysqlDB{
 		addr:        conf.Addr,
@@ -171,7 +173,7 @@ func (m *MysqlDB) putConn(mc *mysqlConn) error {
 	}
 	select {
 	case m.freeConn <- mc:
-		log.Debug("put back mc in m.freeConn")
+		//log.Debug("put back mc in m.freeConn")
 		return nil
 	default:
 		log.Debug("m.freeConn is full.", stack())
