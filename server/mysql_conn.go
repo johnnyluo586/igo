@@ -21,6 +21,7 @@ type mysqlConn struct {
 	netConn          net.Conn
 	affectedRows     uint64
 	insertID         uint64
+	dbname           string
 	cfg              *config.ServerConfig
 	maxPacketAllowed int
 	maxWriteSize     int
@@ -59,8 +60,8 @@ func (mc *mysqlConn) Exec(data []byte) ([][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	log.Debug("resLen  ", resLen)
-	result := make([][]byte, 0, resLen+1)
+
+	result := make([][]byte, 0, resLen*2+1)
 	result = append(result, reshd)
 
 	if resLen > 0 {
@@ -69,7 +70,7 @@ func (mc *mysqlConn) Exec(data []byte) ([][]byte, error) {
 			return nil, err
 		}
 		// rows
-		if result, err = mc.readResultSetPacket(result, resLen); err != nil {
+		if result, err = mc.readUntilEOF(result); err != nil {
 			return nil, err
 		}
 	}
@@ -85,23 +86,23 @@ func (mc *mysqlConn) readResultSetPacket(res [][]byte, count int) ([][]byte, err
 			return nil, err
 		}
 		res = append(res, data)
-		log.Debug("res:", res)
+		//log.Debugf("res len:%v, last:%v", len(res), data)
 
 		// EOF Packet
 		if data[0] == mysql.HeaderEOF && (len(data) == 5 || len(data) == 1) {
 			if i == count {
 				return res, nil
 			}
-			return res, fmt.Errorf("column count mismatch n:%d len:%d", count, cap(res))
+			return res, fmt.Errorf("column count mismatch n:%d len:%d", count, i)
 		}
 	}
 }
 
 // Reads Packets until EOF-Packet or an Error appears. Returns count of Packets read
-func (mc *mysqlConn) readUntilEOF() error {
+func (mc *mysqlConn) readUntilEOF(res [][]byte) ([][]byte, error) {
 	for {
 		data, err := mc.readPacket()
-
+		res = append(res, data)
 		// No Err and no EOF Packet
 		if err == nil && data[0] != mysql.HeaderEOF {
 			continue
@@ -110,7 +111,7 @@ func (mc *mysqlConn) readUntilEOF() error {
 			mc.status = readStatus(data[3:])
 		}
 
-		return err // Err or EOF
+		return res, err // Err or EOF
 	}
 }
 
@@ -360,6 +361,7 @@ func (mc *mysqlConn) writeAuthPacket(cipher []byte) error {
 		data[pos] = 0x00
 		pos++
 	}
+	mc.dbname = mc.cfg.DBName
 
 	// Assume native client during response
 	pos += copy(data[pos:], "mysql_native_password")
@@ -439,3 +441,46 @@ func readLengthEncodedInteger(b []byte) (uint64, bool, int) {
 func readStatus(b []byte) mysql.StatusFlag {
 	return mysql.StatusFlag(b[0]) | mysql.StatusFlag(b[1])<<8
 }
+
+// func (mc *mysqlConn) getWarnings() (err error) {
+// 	rows, err := mc.Query("SHOW WARNINGS", nil)
+// 	if err != nil {
+// 		return
+// 	}
+
+// 	var warnings = MySQLWarnings{}
+// 	var values = make([]driver.Value, 3)
+
+// 	for {
+// 		err = rows.Next(values)
+// 		switch err {
+// 		case nil:
+// 			warning := MySQLWarning{}
+
+// 			if raw, ok := values[0].([]byte); ok {
+// 				warning.Level = string(raw)
+// 			} else {
+// 				warning.Level = fmt.Sprintf("%s", values[0])
+// 			}
+// 			if raw, ok := values[1].([]byte); ok {
+// 				warning.Code = string(raw)
+// 			} else {
+// 				warning.Code = fmt.Sprintf("%s", values[1])
+// 			}
+// 			if raw, ok := values[2].([]byte); ok {
+// 				warning.Message = string(raw)
+// 			} else {
+// 				warning.Message = fmt.Sprintf("%s", values[0])
+// 			}
+
+// 			warnings = append(warnings, warning)
+
+// 		case io.EOF:
+// 			return warnings
+
+// 		default:
+// 			rows.Close()
+// 			return
+// 		}
+// 	}
+// }

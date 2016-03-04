@@ -1,7 +1,10 @@
-# server config store in zk, the file only need config the zk params.
-#[Server]
+#Server config store in zk, the file only need config the zk params.
+
+#[Server.Redis]
+#[Server.Mysql]
 ##服务器监听地址和端口
-#addr = "127.0.0.1:6603"
+#listen = "127.0.0.1:6603"
+#dbaddr = "127.0.0.1:3306"
 ##默认数据库名
 #schema = "testdb"
 ##服务器用户名
@@ -14,6 +17,8 @@
 #readTimeout = 10
 ##server <--> mysql; 超过多少秒没有收到包后， 服务器主动断开 
 #writeTimeout = 10
+##空闲连接超过多长时间回收（回收发生在使用完成后， 放回连接池的时候：直接关闭） 
+#maxLifeTmie = 10
 
 ##database
 ##数据库最大空闲连接数

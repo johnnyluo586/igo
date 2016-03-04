@@ -35,18 +35,18 @@ func (c *Client) readPacket() ([]byte, error) {
 		// Read packet header
 		data, err := c.buf.readNext(4)
 		if err != nil {
-			log.Error(err)
+			// log.Error(err)
 			c.close()
-			return nil, driver.ErrBadConn
+			return nil, err
 		}
 
 		// Packet Length [24 bit]
 		pktLen := int(uint32(data[0]) | uint32(data[1])<<8 | uint32(data[2])<<16)
 
 		if pktLen < 1 {
-			log.Error(mysql.ErrMalformPkt)
+			// log.Error(mysql.ErrMalformPkt)
 			c.close()
-			return nil, driver.ErrBadConn
+			return nil, err
 		}
 
 		// Check Packet Sync [8 bit]
@@ -62,9 +62,9 @@ func (c *Client) readPacket() ([]byte, error) {
 		// Read packet body [pktLen bytes]
 		data, err = c.buf.readNext(pktLen)
 		if err != nil {
-			log.Error(err)
+			// log.Error(err)
 			c.close()
-			return nil, driver.ErrBadConn
+			return nil, err
 		}
 
 		isLastPacket := (pktLen < mysql.MaxPacketSize)
@@ -77,7 +77,7 @@ func (c *Client) readPacket() ([]byte, error) {
 		payload = append(payload, data...)
 
 		if isLastPacket {
-			log.Debug("payload: ", string(payload))
+			// log.Debug("payload: ", string(payload))
 			return payload, nil
 		}
 	}
@@ -111,7 +111,7 @@ func (c *Client) writePacket(data []byte) error {
 				return err
 			}
 		}
-		log.Debug("client write packet:", data)
+		//log.Debug("client write packet:", data)
 		n, err := c.netConn.Write(data[:4+size])
 		if err == nil && n == 4+size {
 			c.sequence++

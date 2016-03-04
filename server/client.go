@@ -24,9 +24,9 @@ var (
 
 //Client the client connection object
 type Client struct {
-	cfg *config.ServerConfig
-	buf buffer
-
+	cfg       *config.ServerConfig
+	buf       buffer
+	dbConn    *mysqlConn
 	netConn   *net.TCPConn
 	die       chan struct{}
 	user      string
@@ -68,9 +68,7 @@ func (c *Client) ConnectID() uint32 {
 }
 
 func (c *Client) close() {
-	if _, ok := <-c.die; ok {
-		close(c.die)
-	}
+	close(c.die)
 }
 
 /******************************************************************************
@@ -157,14 +155,17 @@ func (c *Client) readHandshakeRespone() error {
 	//auth length and auth
 	authLen := int(data[pos])
 	pos++
-	auth := data[pos : pos+authLen]
+	// if authLen == 0 {
+	// 	return mysql.NewErr(mysql.ErrAccessDenied, c.user, c.netConn.RemoteAddr().String(), "NO")
+	// }
 
-	checkAuth := mysql.ScramblePassword(c.salt, []byte(c.cfg.Passwd))
-	if c.user != c.cfg.User || !bytes.Equal(auth, checkAuth) {
-		log.Error("readHandshakeResponse error: 0, auth: ", auth,
-			",checkAuth: ", checkAuth, ",client_user: ", c.user, ",config_set_user: ", c.cfg.User, ",passworld: ", c.cfg.Passwd)
-		return mysql.NewErr(mysql.ErrAccessDenied, c.user, c.netConn.RemoteAddr().String(), "Yes")
-	}
+	// auth := data[pos : pos+authLen]
+	// checkAuth := mysql.ScramblePassword(c.salt, []byte(c.cfg.Passwd))
+	// if c.user != c.cfg.User || !bytes.Equal(auth, checkAuth) {
+	// 	log.Error("readHandshakeResponse error: 0, auth: ", auth,
+	// 		",checkAuth: ", checkAuth, ",client_user: ", c.user, ",config_set_user: ", c.cfg.User, ",passworld: ", c.cfg.Passwd)
+	// 	return mysql.NewErr(mysql.ErrAccessDenied, c.user, c.netConn.RemoteAddr().String(), "Yes")
+	// }
 
 	pos += authLen
 
@@ -228,19 +229,16 @@ func (c *Client) writeError(e error) error {
 ******************************************************************************/
 
 //Accept call Accept and loop proccess the packet
-func (c *Client) Accept() {
+func (c *Client) Accept() error {
 	data, err := c.readPacket()
 	if err != nil {
-		log.Error(err)
-		c.close()
-		return
+		return err
 	}
 	if err := c.dispatch(data); err != nil {
-		log.Error(err)
-		c.close()
-		return
+		return err
 	}
 	c.sequence = 0
+	return nil
 }
 
 func (c *Client) dispatch(data []byte) error {
@@ -273,14 +271,15 @@ func (c *Client) dispatch(data []byte) error {
 	return err
 }
 
-func (c *Client) handleQuit() error {
-	log.Debug("handleQuit")
-	return nil
-}
-
 //----------------------------------------------------------
 // dispatch handle
 //----------------------------------------------------------
+
+func (c *Client) handleQuit() error {
+	log.Debug("handleQuit")
+	c.close()
+	return nil
+}
 
 //handleQuery
 func (c *Client) handleQuery(data []byte) error {
@@ -293,8 +292,15 @@ func (c *Client) handleQuery(data []byte) error {
 		return errCannotGetConn
 	}
 	defer db.putConn(conn)
+
+	useCmd := []byte(string(mysql.ComInitDB) + c.dbname)
+	_, err := conn.Exec(useCmd)
+	if err != nil {
+		return err
+	}
+
 	res, err := conn.Exec(data)
-	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
+	//log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	if err != nil {
 		return err
 	}

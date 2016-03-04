@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net"
+
 	"os"
 	"os/signal"
 	"syscall"
@@ -93,6 +94,7 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	client, die := newClient(conn, &s.cfg.Server)
 	defer func() {
 		s.count.Decr()
+		conn.Close()
 		log.Warnf("Client Close: %v, CurNum: %v", client.ConnectID(), s.count.Size())
 	}()
 	log.Warnf("New Client: %v, id: %v, CurNum: %v", client.Addr(), client.ConnectID(), s.count.Size())
@@ -103,11 +105,20 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	}
 	log.Info("Auth OK: ", client.ConnectID())
 
+	var closed = false
 	for {
-		client.Accept()
+		if err := client.Accept(); err != nil {
+			log.Error(err)
+			return
+		}
+
 		//handle the connection close
 		select {
 		case <-die:
+			closed = true
+		default:
+		}
+		if closed {
 			return
 		}
 	}

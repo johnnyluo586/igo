@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 )
 
@@ -23,6 +25,10 @@ var (
 func main() {
 	//print banner
 	fmt.Println(banner)
+
+	go func() {
+		log.Error(http.ListenAndServe(":6060", nil))
+	}()
 
 	//load config
 	flag.Parse()
