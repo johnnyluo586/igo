@@ -72,7 +72,10 @@ func (s *Server) Run() error {
 			log.Error(err)
 			continue
 		}
-		s.count.Incr()
+		if ok := s.count.Incr(); !ok { //at max client limit or not
+			conn.Close()
+			continue
+		}
 
 		go s.handleClient(conn)
 	}
@@ -86,7 +89,7 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	conn.SetReadBuffer(rcvBuffer)
 	conn.SetWriteBuffer(sndBuffer)
 	// if the connect not send data to server out of readDeadline, it will cut the connect.
-	conn.SetReadDeadline(time.Now().Add(time.Second * readDeadline))
+	//conn.SetReadDeadline(time.Now().Add(time.Second * readDeadline))
 	//conn.SetKeepAlive(true)
 	conn.SetNoDelay(false)
 
@@ -95,9 +98,9 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	defer func() {
 		s.count.Decr()
 		conn.Close()
-		log.Warnf("Client Close: %v, CurNum: %v", client.ConnectID(), s.count.Size())
+		log.Warnf("Client Close: id -> %v", client.ConnectID())
 	}()
-	log.Warnf("New Client: %v, id: %v, CurNum: %v", client.Addr(), client.ConnectID(), s.count.Size())
+	log.Warnf("New Client: %v, id -> %v", client.Addr(), client.ConnectID())
 
 	if err := client.Handshake(); err != nil {
 		log.Error(err)
@@ -124,8 +127,14 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	}
 }
 
-func (s *Server) close() {
-
+func (s *Server) sysInfo() {
+	go func() {
+		t := time.NewTicker(1 * time.Minute)
+		select {
+		case <-t.C:
+			log.Alertf("SYS Info: curCli->%v/%v", s.count.Size(), s.cfg.Server.MaxClient)
+		}
+	}()
 }
 
 func (s *Server) signal() {
@@ -135,11 +144,11 @@ func (s *Server) signal() {
 	go func() {
 		sig := <-sc
 		log.Warnf("Got signal [%d] to exit.", sig)
-		s.close()
 		os.Exit(0)
 	}()
 }
 
 func (s *Server) startup(conf *config.ServerConfig) {
 	InitDB(conf)
+	s.sysInfo()
 }

@@ -1,6 +1,6 @@
 package server
 
-import "sync/atomic"
+import "sync"
 
 var (
 	_defaultMax = int64(1024)
@@ -35,8 +35,12 @@ func (c *ChanCount) SetMax(m int64) {
 
 //Incr incr
 func (c *ChanCount) Incr() bool {
-	c.ch <- struct{}{}
-	return true
+	select {
+	case c.ch <- struct{}{}:
+		return true
+	default:
+		return false
+	}
 }
 
 //Decr decr
@@ -49,6 +53,7 @@ func (c *ChanCount) Size() int64 {
 
 //IntCount int count will when return false when at max.
 type IntCount struct {
+	sync.Mutex
 	max int64
 	cur int64
 }
@@ -62,19 +67,27 @@ func (c *IntCount) SetMax(m int64) {
 
 //Incr incr
 func (c *IntCount) Incr() bool {
+	c.Lock()
 	if c.cur > c.max {
+		c.Unlock()
 		return false
 	}
-	atomic.AddInt64(&c.cur, 1)
+	c.cur++
+	c.Unlock()
 	return true
 }
 
 //Decr decrs
 func (c *IntCount) Decr() {
-	atomic.AddInt64(&c.cur, -1)
+	c.Lock()
+	c.cur--
+	c.Unlock()
 }
 
 //Size size
-func (c *IntCount) Size() int64 {
-	return c.cur
+func (c *IntCount) Size() (s int64) {
+	c.Lock()
+	s = c.cur
+	c.Unlock()
+	return
 }

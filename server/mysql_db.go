@@ -25,6 +25,7 @@ type MysqlDB struct {
 	maxLifetime time.Duration
 	freeConn    chan *mysqlConn
 	openCh      chan struct{}
+	tryTick     *time.Ticker
 	maxIdle     int
 	maxOpen     int
 	numOpen     int
@@ -40,6 +41,7 @@ func Open(conf *config.ServerConfig) (*MysqlDB, error) {
 		maxIdle:     conf.MaxIdleConn,
 		maxOpen:     conf.MaxConnNum,
 		maxLifetime: time.Duration(conf.MaxLifeTime),
+		tryTick:     time.NewTicker(2 * time.Millisecond),
 	}
 	m.freeConn = make(chan *mysqlConn, m.maxOpen)
 	m.openCh = make(chan struct{}, m.maxOpen)
@@ -143,20 +145,21 @@ func (m *MysqlDB) getConn() *mysqlConn {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.maybeOpenNew()
-	select {
-	case v, ok := <-m.freeConn:
-		if ok {
-			return v
+	try := 10
+	for try > 0 {
+		select {
+		case v, ok := <-m.freeConn:
+			if ok {
+				return v
+			}
+		case <-m.tryTick.C:
+			try--
+			continue
+		default:
+			log.Error("getConn case default, freeConn is empty and maxOpen at max.\n", stack())
+			return nil
 		}
-	default:
-		log.Error("getConn case default, freeConn is empty and maxOpen at max.\n", stack())
-		return nil
 	}
-	// log.Debugf("m.freeConn: cap:%v, len:%v", cap(m.freeConn), len(m.freeConn))
-	// v, ok := <-m.freeConn
-	// if ok {
-	// 	return v
-	// }
 	return nil
 }
 
