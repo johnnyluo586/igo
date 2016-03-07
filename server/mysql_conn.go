@@ -49,7 +49,22 @@ func (mc *mysqlConn) expired(timeout time.Duration) bool {
 }
 
 //Exec execute the cmd,and return the read all the  packet.
-func (mc *mysqlConn) Exec(data []byte) ([][]byte, error) {
+func (mc *mysqlConn) Exec(data []byte) ([]byte, error) {
+	cmd := data[0]
+	arg := string(data[1:])
+	if err := mc.writeCommandPacketStr(cmd, arg); err != nil {
+		return nil, err
+	}
+
+	reshd, _, err := mc.readResultSetHeaderPacket()
+	if err != nil {
+		return nil, err
+	}
+	return reshd, err
+}
+
+//Exec execute the cmd,and return the read all the  packet.
+func (mc *mysqlConn) Query(data []byte) ([][]byte, error) {
 	cmd := data[0]
 	arg := string(data[1:])
 	if err := mc.writeCommandPacketStr(cmd, arg); err != nil {

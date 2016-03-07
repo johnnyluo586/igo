@@ -299,7 +299,7 @@ func (c *Client) handleQuery(data []byte) error {
 		return err
 	}
 
-	res, err := conn.Exec(data)
+	res, err := conn.Query(data)
 	//log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	if err != nil {
 		return err
@@ -325,7 +325,7 @@ func (c *Client) handleFieldList(data []byte) error {
 		return errCannotGetConn
 	}
 	defer db.putConn(conn)
-	res, err := conn.Exec(data)
+	res, err := conn.Query(data)
 	if err != nil {
 		return err
 	}
@@ -350,7 +350,7 @@ func (c *Client) useDB(name string) error {
 	}
 	defer db.putConn(conn)
 
-	res, err := conn.Exec(data)
+	res, err := conn.Query(data)
 	if err != nil {
 		return err
 	}

@@ -130,9 +130,11 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 func (s *Server) sysInfo() {
 	go func() {
 		t := time.NewTicker(1 * time.Minute)
-		select {
-		case <-t.C:
-			log.Alertf("SYS Info: curCli->%v/%v", s.count.Size(), s.cfg.Server.MaxClient)
+		for {
+			select {
+			case <-t.C:
+				log.Alertf("SYS Info: curCli->%v/%v", s.count.Size(), s.cfg.Server.MaxClient)
+			}
 		}
 	}()
 }
