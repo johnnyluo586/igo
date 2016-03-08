@@ -1,0 +1,14 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Launch igo",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceRoot}/cmd/igo",
+			"env": {"GOPATH":"/go", "GOROOT":"/usr/local/go", "GOBIN":"/go/bin"},
+			"args": ["-config=../../config/igo_config.toml"]
+		}
+	]
+}
