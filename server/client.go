@@ -315,7 +315,6 @@ func (c *Client) handleStmtPrepare(data []byte) error {
 	}
 
 	res, stmt, err := conn.Prepare(string(data[1:]))
-	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	if err != nil {
 		return err
 	}
@@ -329,7 +328,6 @@ func (c *Client) handlestmtExec(data []byte) error {
 		return errCannotGetConn
 	}
 	res, err := c.stmt.Query(data)
-	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	err = c.writeResultPackets(res)
 	return err
 }
@@ -353,7 +351,6 @@ func (c *Client) handleQuery(data []byte) error {
 	}
 
 	res, err := conn.Query(data)
-	//log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
 	if err != nil {
 		return err
 	}
