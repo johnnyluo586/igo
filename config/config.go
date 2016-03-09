@@ -3,6 +3,8 @@ package config
 import (
 	"io/ioutil"
 
+	"time"
+
 	"github.com/BurntSushi/toml"
 )
 
@@ -32,6 +34,9 @@ type ServerConfig struct {
 	MaxLifeTime  int64 `toml:"maxLifeTmie"`
 	MaxIdleConn  int   `toml:"maxIdleConn"`
 	MaxConnNum   int   `toml:"maxConnNum"`
+
+	Loc              *time.Location //location time
+	ColumnsWithAlias bool
 
 	Strict bool
 }

@@ -312,6 +312,28 @@ func (mc *mysqlConn) writeCommandPacket(command byte) error {
 	return mc.writePacket(data)
 }
 
+func (mc *mysqlConn) writePacketByte(command byte, arg []byte) error {
+	// Reset Packet Sequence
+	mc.sequence = 0
+
+	pktLen := 1 + len(arg)
+	data := mc.buf.takeBuffer(pktLen + 4)
+	if data == nil {
+		// can not take the buffer. Something must be wrong with the connection
+		log.Error(mysql.ErrBusyBuffer)
+		return driver.ErrBadConn
+	}
+
+	// Add command byte
+	data[4] = command
+
+	// Add arg
+	copy(data[5:], arg)
+
+	// Send CMD packet
+	return mc.writePacket(data)
+}
+
 func (mc *mysqlConn) writeCommandPacketStr(command byte, arg string) error {
 	// Reset Packet Sequence
 	mc.sequence = 0

@@ -28,6 +28,7 @@ type Client struct {
 	buf       buffer
 	dbConn    *mysqlConn
 	netConn   *net.TCPConn
+	stmt      *mysqlStmt
 	die       chan struct{}
 	user      string
 	dbname    string
@@ -255,11 +256,16 @@ func (c *Client) dispatch(data []byte) error {
 
 	case mysql.ComFieldList:
 		err = c.handleFieldList(data)
+	case
+		mysql.ComStmtPrepare:
+		err = c.handleStmtPrepare(data)
 
-	case mysql.ComStmtClose,
-		mysql.ComStmtExecute,
-		mysql.ComStmtFetch,
-		mysql.ComStmtPrepare,
+	case mysql.ComStmtExecute:
+		err = c.handlestmtExec(data)
+
+	case mysql.ComStmtClose:
+		err = c.handleStmtClose(data)
+	case mysql.ComStmtFetch,
 		mysql.ComStmtReset,
 		mysql.ComStmtSendLongData:
 		err = c.handleStmt(data)
@@ -279,6 +285,53 @@ func (c *Client) handleQuit() error {
 	log.Debug("handleQuit")
 	c.close()
 	return nil
+}
+
+func (c *Client) handleStmtClose(data []byte) error {
+	stmtID := binary.LittleEndian.Uint32(data[1:])
+	if stmtID != c.stmt.id {
+		return mysql.NewErr(mysql.ErrUnknownStmtHandler, stmtID)
+	}
+	err := c.stmt.Close()
+	c.stmt = nil
+	return err
+}
+
+func (c *Client) handleStmtPrepare(data []byte) error {
+	db := GetDB(string(data))
+	if db == nil {
+		return errNotfoundDB
+	}
+	conn := db.getConn()
+	if conn == nil {
+		return errCannotGetConn
+	}
+	// defer db.putConn(conn)
+
+	useCmd := []byte(string(mysql.ComInitDB) + c.dbname)
+	_, err := conn.Exec(useCmd)
+	if err != nil {
+		return err
+	}
+
+	res, stmt, err := conn.Prepare(string(data[1:]))
+	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
+	if err != nil {
+		return err
+	}
+	c.stmt = stmt
+	err = c.writeResultPackets(res)
+	return err
+}
+
+func (c *Client) handlestmtExec(data []byte) error {
+	if c.stmt == nil || c.stmt.mc == nil {
+		return errCannotGetConn
+	}
+	res, err := c.stmt.Query(data)
+	log.Debugf("handleQuery:data:%v, res:%v", string(data[1:]), res)
+	err = c.writeResultPackets(res)
+	return err
 }
 
 //handleQuery

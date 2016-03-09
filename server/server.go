@@ -127,6 +127,11 @@ func (s *Server) handleClient(conn *net.TCPConn) {
 	}
 }
 
+func (s *Server) startup(conf *config.ServerConfig) {
+	InitDB(conf)
+	s.sysInfo()
+}
+
 func (s *Server) sysInfo() {
 	go func() {
 		t := time.NewTicker(1 * time.Minute)
@@ -148,9 +153,4 @@ func (s *Server) signal() {
 		log.Warnf("Got signal [%d] to exit.", sig)
 		os.Exit(0)
 	}()
-}
-
-func (s *Server) startup(conf *config.ServerConfig) {
-	InitDB(conf)
-	s.sysInfo()
 }

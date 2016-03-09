@@ -6,7 +6,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package mysql
+package server
 
 import (
 	"crypto/sha1"
@@ -14,6 +14,7 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"fmt"
+	"igo/mysql"
 	"io"
 	"math/rand"
 	"strings"
@@ -275,7 +276,7 @@ func parseDateTime(str string, loc *time.Location) (t time.Time, err error) {
 		if str == base[:len(str)] {
 			return
 		}
-		t, err = time.Parse(TimeFormat[:len(str)], str)
+		t, err = time.Parse(mysql.TimeFormat[:len(str)], str)
 	default:
 		err = fmt.Errorf("invalid time string: %s", str)
 		return
@@ -477,10 +478,6 @@ func formatBinaryDateTime(src []byte, length uint8, justTime bool) (driver.Value
 *                       Convert from and to bytes                             *
 ******************************************************************************/
 
-func Uint64ToBytes(n uint64) []byte {
-	return uint64ToBytes(n)
-}
-
 func uint64ToBytes(n uint64) []byte {
 	return []byte{
 		byte(n),
@@ -593,10 +590,6 @@ func readLengthEncodedInteger(b []byte) (uint64, bool, int) {
 
 	// 0-250: value of first byte
 	return uint64(b[0]), false, 1
-}
-
-func AppendLengthEncodedInteger(b []byte, n uint64) []byte {
-	return appendLengthEncodedInteger(b, n)
 }
 
 // encodes a uint64 value and appends it to the given bytes slice
