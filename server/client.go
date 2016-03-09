@@ -265,11 +265,11 @@ func (c *Client) dispatch(data []byte) error {
 
 	case mysql.ComStmtClose:
 		err = c.handleStmtClose(data)
+
 	case mysql.ComStmtFetch,
 		mysql.ComStmtReset,
 		mysql.ComStmtSendLongData:
-		err = c.handleStmt(data)
-
+		fallthrough
 	default:
 		return fmt.Errorf("unsurport cmd %v  %v", data[0], string(data))
 	}
@@ -381,11 +381,6 @@ func (c *Client) handleFieldList(data []byte) error {
 	}
 	err = c.writeResultPackets(res)
 	return err
-}
-
-//handleStmt
-func (c *Client) handleStmt(data []byte) error {
-	return nil
 }
 
 func (c *Client) useDB(name string) error {

@@ -103,18 +103,18 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 	// Reading Handshake Initialization Packet
 	cipher, err := mc.readInitPacket()
 	if err != nil {
-		mc.cleanup()
+		mc.Close()
 		return nil, err
 	}
 	// Send Client Authentication Packet
 	if err = mc.writeAuthPacket(cipher); err != nil {
-		mc.cleanup()
+		mc.Close()
 		return nil, err
 	}
 
 	// Handle response to auth packet, switch methods if possible
 	if err := mc.readInitOK(); err != nil {
-		mc.cleanup()
+		mc.Close()
 		return nil, err
 	}
 	m.numOpen++

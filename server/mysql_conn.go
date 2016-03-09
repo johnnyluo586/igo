@@ -451,10 +451,6 @@ func (mc *mysqlConn) readInitOK() error {
 	return err
 }
 
-func (mc *mysqlConn) cleanup() {
-
-}
-
 func readStatus(b []byte) mysql.StatusFlag {
 	return mysql.StatusFlag(b[0]) | mysql.StatusFlag(b[1])<<8
 }
