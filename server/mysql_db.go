@@ -63,7 +63,7 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 	mc := &mysqlConn{
 		maxPacketAllowed: mysql.MaxPacketSize,
 		maxWriteSize:     mysql.MaxPacketSize - 1,
-		writeTimeout:     defaultWriteTimeout,
+		writeTimeout:     time.Duration(defaultWriteTimeout * time.Second),
 		createdAt:        nowFunc(),
 	}
 	mc.cfg = &config.ServerConfig{
@@ -97,8 +97,9 @@ func (m *MysqlDB) newConn() (*mysqlConn, error) {
 	mc.buf = newBuffer(mc.netConn)
 
 	// Set I/O timeouts
-	mc.buf.timeout = time.Duration(mc.cfg.ReadTimeout)
-	mc.writeTimeout = time.Duration(mc.cfg.WriteTimeout)
+
+	mc.buf.timeout = time.Duration(mc.cfg.ReadTimeout) * time.Second
+	mc.writeTimeout = time.Duration(mc.cfg.WriteTimeout) * time.Second
 
 	// Reading Handshake Initialization Packet
 	cipher, err := mc.readInitPacket()

@@ -29,9 +29,9 @@ type ServerConfig struct {
 	Collation string `toml:"collation"`
 
 	MaxClient    int64 `toml:"maxClient"`
-	WriteTimeout int64 `toml:"writeTimeout"`
-	ReadTimeout  int64 `toml:"readTimeout"`
-	MaxLifeTime  int64 `toml:"maxLifeTmie"`
+	WriteTimeout int   `toml:"writeTimeout"`
+	ReadTimeout  int   `toml:"readTimeout"`
+	MaxLifeTime  int   `toml:"maxLifeTmie"`
 	MaxIdleConn  int   `toml:"maxIdleConn"`
 	MaxConnNum   int   `toml:"maxConnNum"`
 
